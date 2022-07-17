@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -14,19 +15,20 @@ import (
 	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
 )
 
-var TOPIC = "event-processing-project"
+var TOPIC = "the-meetup-events"
 
 type config struct {
-	BootstrapServer string `yaml:"bootstrap.servers"`
+	BootstrapServer  string `yaml:"bootstrap.servers"`
 	SecurityProtocol string `yaml:"security.protocol"`
-	SASLMechanism string `yaml:"sasl.mechanisms"`
-	SASLUsername string `yaml:"sasl.username"`
-	SASLPassword string `yaml:"sasl.password"`
+	SASLMechanism    string `yaml:"sasl.mechanisms"`
+	SASLUsername     string `yaml:"sasl.username"`
+	SASLPassword     string `yaml:"sasl.password"`
 }
 
 // RecordValue represents the struct of the value in a Kafka message
 type RecordValue struct {
 	Count int
+	sync.Mutex
 }
 
 func getConfig(filename string) (*config, error) {
@@ -59,12 +61,12 @@ func CreateTopic(p *kafka.Producer, topic string) {
 	results, err := cl.CreateTopics(
 		ctx,
 		[]kafka.TopicSpecification{{
-				Topic: topic,
-				NumPartitions: 1,
-				ReplicationFactor: 3,
-			}},
+			Topic:             topic,
+			NumPartitions:     1,
+			ReplicationFactor: 3,
+		}},
 		kafka.SetAdminOperationTimeout(maxDur),
-		)
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -84,58 +86,95 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	//count := RecordValue{
+	//	Count: 0,
+	//}
 	p, err := kafka.NewProducer(&kafka.ConfigMap{
 		"bootstrap.servers": cfg.BootstrapServer,
-		"sasl.mechanisms": cfg.SASLMechanism,
+		"sasl.mechanisms":   cfg.SASLMechanism,
 		"security.protocol": cfg.SecurityProtocol,
-		"sasl.username": cfg.SASLUsername,
-		"sasl.password": cfg.SASLPassword,
+		"sasl.username":     cfg.SASLUsername,
+		"sasl.password":     cfg.SASLPassword,
 	})
 	if err != nil {
 		panic(err)
 	}
 
-	CreateTopic(p,TOPIC )
+	CreateTopic(p, TOPIC)
 
-	// Go-routine to handle message delivery reports and
-	// possibly other event types (errors, stats, etc)
-	go func() {
-		for e := range p.Events() {
-			switch ev := e.(type) {
-			case *kafka.Message:
-				if ev.TopicPartition.Error != nil {
-					fmt.Printf("Failed to deliver message: %v\n", ev.TopicPartition)
-				} else {
-					fmt.Printf("Successfully produced record to topic %s partition [%d] @ offset %v\n",
-						*ev.TopicPartition.Topic, ev.TopicPartition.Partition, ev.TopicPartition.Offset)
-				}
-			}
-		}
-	}()
+	//// Go-routine to handle message delivery reports and
+	//// possibly other event types (errors, stats, etc)
+	//go func() {
+	//	for e := range p.Events() {
+	//		switch ev := e.(type) {
+	//		case *kafka.Message:
+	//			if ev.TopicPartition.Error != nil {
+	//				fmt.Printf("Failed to deliver message: %v\n", ev.TopicPartition)
+	//			} else {
+	//				count.Lock()
+	//				count.Count++
+	//				fmt.Printf("%d Successfully produced record to topic %s partition [%d] @ offset %v\n",
+	//					count.Count, *ev.TopicPartition.Topic, ev.TopicPartition.Partition, ev.TopicPartition.Offset)
+	//				count.Unlock()
+	//			}
+	//		}
+	//	}
+	//}()
 
 	f, err := os.Open("./data/events.json") // file.json has the json content
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	//client, err := schemaregistry.NewClient(schemaregistry.NewConfigWithAuthentication(
+	//	config.,
+	//	schemaRegistryAPIKey,
+	//	schemaRegistryAPISecret))
+	//
+	//if err != nil {
+	//	fmt.Printf("Failed to create schema registry client: %s\n", err)
+	//	os.Exit(1)
+	//}
+	//
+	//ser, err := avro.NewGenericSerializer(client, serde.ValueSerde, avro.NewSerializerConfig())
+	//
+	//if err != nil {
+	//	fmt.Printf("Failed to create serializer: %s\n", err)
+	//	os.Exit(1)
+	//}
+	//deser, err := avro.NewGenericDeserializer(client, serde.ValueSerde, avro.NewDeserializerConfig())
+	//
+	//if err != nil {
+	//	fmt.Printf("Failed to create deserializer: %s\n", err)
+	//	os.Exit(1)
+	//}
 	defer f.Close()
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		fmt.Printf("Preparing to produce record: %s\n", scanner.Bytes())
 		p.Produce(&kafka.Message{
 			TopicPartition: kafka.TopicPartition{Topic: &TOPIC, Partition: kafka.PartitionAny},
 			Value:          scanner.Bytes(),
-			Key: 			[]byte("events"),
+			Key:            []byte("events"),
 		}, nil)
+		e := <-p.Events()
+		message := e.(*kafka.Message)
+		if message.TopicPartition.Error != nil {
+			fmt.Printf("failed to deliver message: %v\n",
+				message.TopicPartition)
+		} else {
+			fmt.Printf("delivered to topic %s [%d] at offset %v\n",
+				*message.TopicPartition.Topic,
+				message.TopicPartition.Partition,
+				message.TopicPartition.Offset)
+		}
 	}
+	p.Close()
+
 	//// Wait for all messages to be delivered
-	p.Flush(15 * 1000)
+	//p.Flush(80 * 1000)
 
 	fmt.Printf("15 messages were produced to topic %s\n!", TOPIC)
 
-	p.Close()
-
-
-
+	//p.Close()
 
 }
