@@ -63,7 +63,7 @@ func CreateTopic(p *kafka.Producer, topic string) {
 		[]kafka.TopicSpecification{{
 			Topic:             topic,
 			NumPartitions:     1,
-			ReplicationFactor: 3,
+			ReplicationFactor: 1,
 		}},
 		kafka.SetAdminOperationTimeout(maxDur),
 	)
@@ -71,7 +71,8 @@ func CreateTopic(p *kafka.Producer, topic string) {
 		panic(err)
 	}
 	for _, result := range results {
-		if result.Error.Code() != kafka.ErrNoError && result.Error.Code() != kafka.ErrTopicAlreadyExists {
+		if result.Error.Code() != kafka.ErrNoError &&
+			result.Error.Code() != kafka.ErrTopicAlreadyExists {
 			fmt.Printf("Failed to create topic: %v\n", result.Error)
 			os.Exit(1)
 		}
@@ -86,15 +87,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	//count := RecordValue{
-	//	Count: 0,
-	//}
+
 	p, err := kafka.NewProducer(&kafka.ConfigMap{
 		"bootstrap.servers": cfg.BootstrapServer,
-		"sasl.mechanisms":   cfg.SASLMechanism,
-		"security.protocol": cfg.SecurityProtocol,
-		"sasl.username":     cfg.SASLUsername,
-		"sasl.password":     cfg.SASLPassword,
+		// "sasl.mechanisms":   cfg.SASLMechanism,
+		// "security.protocol": cfg.SecurityProtocol,
+		// "sasl.username":     cfg.SASLUsername,
+		// "sasl.password":     cfg.SASLPassword,
 	})
 	if err != nil {
 		panic(err)
@@ -102,59 +101,20 @@ func main() {
 
 	CreateTopic(p, TOPIC)
 
-	//// Go-routine to handle message delivery reports and
-	//// possibly other event types (errors, stats, etc)
-	//go func() {
-	//	for e := range p.Events() {
-	//		switch ev := e.(type) {
-	//		case *kafka.Message:
-	//			if ev.TopicPartition.Error != nil {
-	//				fmt.Printf("Failed to deliver message: %v\n", ev.TopicPartition)
-	//			} else {
-	//				count.Lock()
-	//				count.Count++
-	//				fmt.Printf("%d Successfully produced record to topic %s partition [%d] @ offset %v\n",
-	//					count.Count, *ev.TopicPartition.Topic, ev.TopicPartition.Partition, ev.TopicPartition.Offset)
-	//				count.Unlock()
-	//			}
-	//		}
-	//	}
-	//}()
-
-	f, err := os.Open("./data/events.json") // file.json has the json content
+	f, err := os.Open("./data/events.json")
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	//client, err := schemaregistry.NewClient(schemaregistry.NewConfigWithAuthentication(
-	//	config.,
-	//	schemaRegistryAPIKey,
-	//	schemaRegistryAPISecret))
-	//
-	//if err != nil {
-	//	fmt.Printf("Failed to create schema registry client: %s\n", err)
-	//	os.Exit(1)
-	//}
-	//
-	//ser, err := avro.NewGenericSerializer(client, serde.ValueSerde, avro.NewSerializerConfig())
-	//
-	//if err != nil {
-	//	fmt.Printf("Failed to create serializer: %s\n", err)
-	//	os.Exit(1)
-	//}
-	//deser, err := avro.NewGenericDeserializer(client, serde.ValueSerde, avro.NewDeserializerConfig())
-	//
-	//if err != nil {
-	//	fmt.Printf("Failed to create deserializer: %s\n", err)
-	//	os.Exit(1)
-	//}
 	defer f.Close()
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		p.Produce(&kafka.Message{
-			TopicPartition: kafka.TopicPartition{Topic: &TOPIC, Partition: kafka.PartitionAny},
-			Value:          scanner.Bytes(),
-			Key:            []byte("events"),
+			TopicPartition: kafka.TopicPartition{
+				Topic:     &TOPIC,
+				Partition: kafka.PartitionAny,
+			},
+			Value: scanner.Bytes(),
+			Key:   []byte("events"),
 		}, nil)
 		e := <-p.Events()
 		message := e.(*kafka.Message)
@@ -170,11 +130,6 @@ func main() {
 	}
 	p.Close()
 
-	//// Wait for all messages to be delivered
-	//p.Flush(80 * 1000)
-
-	fmt.Printf("15 messages were produced to topic %s\n!", TOPIC)
-
-	//p.Close()
+	fmt.Printf("Events are produced to %s topic \n", TOPIC)
 
 }
