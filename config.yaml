@@ -1,0 +1,13 @@
+# Required connection configs for Kafka producer, consumer, and admin
+bootstrap.servers: localhost:9092
+security.protocol: SASL_SSL
+sasl.mechanisms: PLAIN
+sasl.username: USERNAME
+sasl.password: PASS
+
+# NOTE WHEN USED FOR LOCAL DEPLOYMENTS (docker-compose.yml), 
+# IT IS ENOUGH TO JUST DECLARE bootsrap.servers as shown above. 
+
+
+# Best practice for higher availability in librdkafka clients prior to 1.7
+session.timeout.ms: 45000
