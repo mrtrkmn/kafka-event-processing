@@ -15,3 +15,9 @@ The [docker-compose.yaml](./docker-compose.yml) file is fetched from Confluent o
 ```bash 
 $ curl --silent --output docker-compose.yml https://raw.githubusercontent.com/confluentinc/cp-all-in-one/7.2.0-post/cp-all-in-one/docker-compose.yml
 ```
+
+## Report 
+
+The report of this mini project can be found in this LaTex repository: https://github.com/mrtrkmn/Event-Processing-Report
+
+- Compiled version of the LaTex file(s): https://github.com/mrtrkmn/Event-Processing-Report/tree/main/compiled
